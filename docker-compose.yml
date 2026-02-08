@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  skiba-bot:
+    build: .
+    container_name: skiba-bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./token.pickle:/app/token.pickle
+      - ./credentials.json:/app/credentials.json
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,18 @@
+# Environment
+.env
+token.pickle
+credentials.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+nul
+Thumbs.db
+.DS_Store
