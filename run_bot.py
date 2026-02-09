@@ -238,6 +238,140 @@ def add_to_history(phone, role, content):
 
 
 # ============================================================
+# CONVERSATION HISTORY SCANNING - load past context on restart
+# ============================================================
+loaded_context = set()  # phones we already tried loading context for
+
+
+def load_conversation_context(chat_id, phone):
+    """Load past conversation context when we have no in-memory history.
+
+    Priority:
+    1. Green API getChatHistory - actual WhatsApp messages
+    2. Google Sheets fallback - stored lead profile data
+    """
+    if phone in loaded_context:
+        return
+    loaded_context.add(phone)
+
+    # --- Try Green API chat history ---
+    try:
+        result = bot.api.journals.getChatHistory(chat_id, 30)
+        messages = result.data if result.data else []
+
+        if messages and isinstance(messages, list):
+            history = []
+            for msg in reversed(messages):  # API returns newest first
+                msg_type = msg.get("typeMessage", "")
+                # Only process text messages
+                if msg_type not in ("outgoing", "incoming", "textMessage", "extendedTextMessage"):
+                    # Check by 'type' field instead
+                    pass
+
+                text = ""
+                # Try different text field locations
+                text = msg.get("textMessage", "")
+                if not text:
+                    text_data = msg.get("textMessageData", {})
+                    if isinstance(text_data, dict):
+                        text = text_data.get("textMessage", "")
+                if not text:
+                    ext_data = msg.get("extendedTextMessageData", {})
+                    if isinstance(ext_data, dict):
+                        text = ext_data.get("text", "")
+
+                if not text:
+                    continue
+
+                # Determine role: outgoing = assistant, incoming = user
+                msg_type_raw = msg.get("type", "")
+                if msg_type_raw == "outgoing":
+                    history.append({"role": "assistant", "content": text})
+                elif msg_type_raw == "incoming":
+                    history.append({"role": "user", "content": text})
+                else:
+                    # Fallback: check chatId vs senderId
+                    sender = msg.get("senderId", "")
+                    if sender and sender == chat_id:
+                        history.append({"role": "user", "content": text})
+                    else:
+                        history.append({"role": "assistant", "content": text})
+
+            if history:
+                with history_lock:
+                    lead_histories[phone] = history[-MAX_HISTORY_PER_LEAD:]
+                logger.info(f"[HISTORY] Loaded {len(history)} messages from Green API for {phone}")
+                return
+
+    except Exception as e:
+        logger.warning(f"[HISTORY] getChatHistory failed for {phone}: {e}")
+
+    # --- Fallback: Google Sheets lead data ---
+    if lead_manager:
+        try:
+            lead = lead_manager.get_lead(phone)
+            if lead and int(lead.get("message_count", 0) or 0) > 0:
+                # Build context summary from stored data
+                parts = ["[המשך שיחה קודמת - נתונים מגוגל שיטס]"]
+
+                name = lead.get("name", "")
+                if name:
+                    parts.append(f"שם: {name}")
+
+                age = lead.get("age", "")
+                if age:
+                    parts.append(f"גיל: {age}")
+
+                location = lead.get("location", "")
+                if location:
+                    parts.append(f"מיקום: {location}")
+
+                experience = lead.get("experience", "")
+                if experience:
+                    parts.append(f"ניסיון: {experience}")
+
+                score = lead.get("match_score", "")
+                if score:
+                    parts.append(f"ציון התאמה: {score}")
+
+                status = lead.get("status", "")
+                if status:
+                    parts.append(f"סטטוס: {status}")
+
+                msg_count = lead.get("message_count", "")
+                if msg_count:
+                    parts.append(f"הודעות קודמות: {msg_count}")
+
+                summary = lead.get("conversation_summary", "")
+                if summary:
+                    parts.append(f"סיכום שיחה קודמת: {summary}")
+
+                rejects = lead.get("rejects", "")
+                if rejects:
+                    parts.append(f"התנגדויות: {rejects}")
+
+                meeting = lead.get("meeting", "")
+                if meeting:
+                    parts.append(f"פגישה שנקבעה: {meeting}")
+
+                context_text = "\n".join(parts)
+
+                # Inject as a system-like context at the start of history
+                with history_lock:
+                    lead_histories[phone] = [
+                        {"role": "user", "content": "היי"},
+                        {"role": "assistant", "content": context_text},
+                    ]
+                logger.info(f"[HISTORY] Loaded lead profile from Google Sheets for {phone} (msg_count={msg_count})")
+                return
+
+        except Exception as e:
+            logger.warning(f"[HISTORY] Google Sheets fallback failed for {phone}: {e}")
+
+    logger.info(f"[HISTORY] No past context found for {phone} - treating as new lead")
+
+
+# ============================================================
 # MESSAGE BATCHING - combine rapid messages into one
 # ============================================================
 message_buffers = {}  # {chat_id: {"messages": [], "timer": Timer, ...}}
@@ -444,6 +578,10 @@ def process_message(chat_id, sender_name, message_text, phone):
 
             except Exception as e:
                 logger.error(f"Error with Google Sheets: {e}")
+
+        # 1.5. Load past conversation context if we have no in-memory history
+        if not get_lead_history(phone):
+            load_conversation_context(chat_id, phone)
 
         # 2. Add user message to per-lead history
         add_to_history(phone, "user", message_text)
