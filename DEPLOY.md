@@ -16,7 +16,7 @@
 ```
 gcloud init
 ```
-4. Log in and select your "skiba-bot" project
+4. Log in and select your project
 
 ## Step 3: Create a Virtual Machine (VM)
 
@@ -62,7 +62,7 @@ gcloud compute ssh skiba-bot --zone=me-west1-a
 From YOUR computer (not the VM), run:
 
 ```bash
-gcloud compute scp --recurse "c:/Users/Eden/Desktop/skiba-bot-cloud" skiba-bot:~/skiba-bot --zone=me-west1-a
+gcloud compute scp --recurse /path/to/skiba-bot-cloud skiba-bot:~/skiba-bot --zone=me-west1-a
 ```
 
 ## Step 7: Create .env File on VM
@@ -75,12 +75,13 @@ cd ~/skiba-bot
 nano .env
 ```
 
-Paste your real values:
+Paste your real values (see .env.example for all required fields):
 ```
-GREEN_API_INSTANCE_ID=7105232057
-GREEN_API_TOKEN=your_real_token_here
-ANTHROPIC_API_KEY=your_real_key_here
-GOOGLE_SHEET_ID=1f92zBisLCQHcSs5GyjZRXwlIW1H0CJkuidmtl72LX6c
+GREEN_API_INSTANCE_ID=your_instance_id
+GREEN_API_TOKEN=your_token
+ANTHROPIC_API_KEY=your_api_key
+GOOGLE_SHEET_ID=your_sheet_id
+EDEN_PHONE=your_phone_number
 MODEL_NAME=claude-sonnet-4-5-20250929
 MAX_TOKENS=4096
 TEMPERATURE=0.7
@@ -93,9 +94,9 @@ Press Ctrl+O to save, Ctrl+X to exit nano.
 From YOUR computer, upload the credentials files:
 
 ```bash
-gcloud compute scp "c:/Users/Eden/Desktop/test-project2/credentials.json" skiba-bot:~/skiba-bot/credentials.json --zone=me-west1-a
+gcloud compute scp /path/to/credentials.json skiba-bot:~/skiba-bot/credentials.json --zone=me-west1-a
 
-gcloud compute scp "c:/Users/Eden/Desktop/test-project2/token.pickle" skiba-bot:~/skiba-bot/token.pickle --zone=me-west1-a
+gcloud compute scp /path/to/token.pickle skiba-bot:~/skiba-bot/token.pickle --zone=me-west1-a
 ```
 
 ## Step 9: Start the Bot
@@ -140,7 +141,7 @@ docker-compose down
 1. Make changes on your computer
 2. Upload new files:
 ```bash
-gcloud compute scp --recurse "c:/Users/Eden/Desktop/skiba-bot-cloud" skiba-bot:~/skiba-bot --zone=me-west1-a
+gcloud compute scp --recurse /path/to/skiba-bot-cloud skiba-bot:~/skiba-bot --zone=me-west1-a
 ```
 3. Rebuild and restart:
 ```bash

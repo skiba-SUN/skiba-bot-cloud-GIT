@@ -36,8 +36,9 @@ SWEEP_WINDOW = 5             # Check messages from last N minutes
 MAX_TRACKED = 500            # Max tracked message IDs
 MAX_HISTORY_PER_LEAD = 40    # Max conversation messages per lead
 ANALYSIS_EVERY_N = 2         # Run AI analysis every N bot responses
-EDEN_CHAT_ID = "972555614104@c.us"
-EXCLUDED_NUMBERS = {"972555614104"}  # Don't auto-respond to Eden
+EDEN_PHONE = os.getenv('EDEN_PHONE', '')
+EDEN_CHAT_ID = f"{EDEN_PHONE}@c.us" if EDEN_PHONE else ""
+EXCLUDED_NUMBERS = {EDEN_PHONE} if EDEN_PHONE else set()
 
 
 # ============================================================
