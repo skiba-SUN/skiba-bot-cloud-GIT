@@ -110,13 +110,15 @@ Stage 1 questions you need to cover (in natural order):
 - Explain why it helps: "השאלות האלה עוזרות לי להתאים אותך לטיול הכי מתאים"
 - Don't rapid-fire questions - let the conversation breathe
 
-**WHATSAPP RULES (FOLLOW STRICTLY):**
-- MAX 2-4 sentences per response. This is WhatsApp, not email!
+**⚠️ WHATSAPP RULES - MOST CRITICAL (FOLLOW STRICTLY!):**
+- ⚠️ **MAXIMUM 2-3 SHORT sentences per response** - THIS IS THE #1 RULE!
+- WhatsApp = SHORT messages, not long email paragraphs!
 - Ask ONE question at a time - never overwhelm
 - Let THEM lead sometimes - if they ask something, answer it naturally
 - Friendly and real - like a friend who trains, not a scripted bot
 - Emoji: maximum 1 per message, and not in every message
 - Use Hebrew when user writes in Hebrew, English for English
+- **If your draft response is longer than 3 sentences, DELETE content and make it shorter!**
 
 **AUTHENTICITY RULES (CRITICAL):**
 - You're a chatbot, but talk like a real person who trains and knows Thailand
@@ -419,6 +421,7 @@ def flush_buffer(chat_id):
     """Process all buffered messages for a chat as one combined message"""
     with buffer_lock:
         if chat_id not in message_buffers:
+            logger.warning(f"[BATCH] flush_buffer called for {chat_id} but no buffer exists!")
             return
         buffer = message_buffers.pop(chat_id)
 
@@ -428,6 +431,7 @@ def flush_buffer(chat_id):
     else:
         combined = buffer["messages"][0]
 
+    logger.info(f"[BATCH] 🚀 Launching process_message thread for {chat_id}")
     # Process in background thread
     thread = threading.Thread(
         target=process_message,
@@ -465,11 +469,13 @@ Required JSON format:
 {
     "summary": "Concise analytical Hebrew summary (2-3 sentences). What the lead wants, readiness, concerns.",
     "experience": "one of: מתחיל/בינוני/מתקדם, or null if unknown",
+    "age": "number or age range like '25-30'. null if unknown",
+    "location": "City/area in Israel in Hebrew. null if unknown",
+    "travel_readiness": "Hebrew short answer. Have they traveled abroad before? null if unknown",
+    "goals": "Hebrew. What they want from the trip (fitness/boxing skills/healing/extreme experience). null if unknown",
     "match_score": "number 0-100. Criteria: engagement level (+25), expressed interest in trip (+25), good fit for product (+25), close to booking/call (+25)",
     "rejects": "Hebrew. Objections the customer raised + suspected hidden objections. null if none detected",
     "meeting": "If call/meeting was scheduled with specific details: 'יום [day], [date], שעה [time]'. null if not scheduled yet",
-    "age": "number or age range like '25-30'. null if unknown",
-    "location": "City/area in Israel in Hebrew. null if unknown",
     "status": "one of: חדש/בשיחה/נקבעה שיחה/נסגר/לא מתאים"
 }
 
@@ -557,6 +563,7 @@ lead_response_count = {}  # {phone: count} - tracks responses for analysis frequ
 
 def process_message(chat_id, sender_name, message_text, phone):
     """Process a message: sheets -> AI -> typing delay -> reply -> analysis -> notify"""
+    logger.info(f"[PROCESS] ⚡ Starting to process message for {phone} ({chat_id})")
     try:
         # 1. Get/create lead in Google Sheets
         if lead_manager:
@@ -625,8 +632,9 @@ def process_message(chat_id, sender_name, message_text, phone):
         time.sleep(delay)
 
         # 5. Send reply
+        logger.info(f"[SEND] 📤 Sending reply to {chat_id}: {reply[:80]}...")
         bot.api.sending.sendMessage(chat_id, reply)
-        logger.info(f"Reply sent to {chat_id}")
+        logger.info(f"[SEND] ✅ Reply successfully sent to {chat_id}")
 
         # 6. Add bot response to per-lead history
         add_to_history(phone, "assistant", reply)
@@ -645,14 +653,18 @@ def process_message(chat_id, sender_name, message_text, phone):
                             sheet_updates["conversation_summary"] = analysis["summary"]
                         if analysis.get("experience"):
                             sheet_updates["experience"] = analysis["experience"]
-                        if analysis.get("match_score") is not None:
-                            sheet_updates["match_score"] = analysis["match_score"]
-                        if analysis.get("rejects"):
-                            sheet_updates["rejects"] = analysis["rejects"]
                         if analysis.get("age"):
                             sheet_updates["age"] = str(analysis["age"])
                         if analysis.get("location"):
                             sheet_updates["location"] = analysis["location"]
+                        if analysis.get("travel_readiness"):
+                            sheet_updates["travel_readiness"] = analysis["travel_readiness"]
+                        if analysis.get("goals"):
+                            sheet_updates["goals"] = analysis["goals"]
+                        if analysis.get("match_score") is not None:
+                            sheet_updates["match_score"] = analysis["match_score"]
+                        if analysis.get("rejects"):
+                            sheet_updates["rejects"] = analysis["rejects"]
                         if analysis.get("status"):
                             sheet_updates["status"] = analysis["status"]
 
@@ -736,13 +748,16 @@ def message_handler(notification: Notification) -> None:
         if not message_text:
             return
 
-        logger.info(f"Message from {sender_name} ({chat_id}): {message_text[:80]}")
-
         # Track message ID to avoid duplicate processing
         msg_id = notification.event.get("idMessage", "")
+        logger.info(f"[HANDLER] Message from {sender_name} ({chat_id}) | msg_id={msg_id} | text: {message_text[:80]}")
+
         if msg_id and mark_processed(msg_id):
-            logger.info(f"Message {msg_id} already processed, skipping")
+            logger.warning(f"[HANDLER] Message {msg_id} ALREADY PROCESSED - SKIPPING")
             return
+
+        if not msg_id:
+            logger.warning(f"[HANDLER] No msg_id for message from {chat_id} - CANNOT TRACK DUPLICATES")
 
         phone = f"+{chat_id.split('@')[0]}" if '@' in chat_id else chat_id
 

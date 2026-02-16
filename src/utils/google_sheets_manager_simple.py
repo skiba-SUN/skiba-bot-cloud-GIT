@@ -297,7 +297,7 @@ class GoogleSheetsManager:
                     # Now add headers
                     self.sheets.values().update(
                         spreadsheetId=self.spreadsheet_id,
-                        range=f'{self.sheet_name}!A1:S1',
+                        range=f'{self.sheet_name}!A1:{self._last_col}1',
                         valueInputOption='RAW',
                         body={'values': [self.columns]}
                     ).execute()
@@ -316,7 +316,7 @@ class GoogleSheetsManager:
         try:
             result = self.sheets.values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range=f'{self.sheet_name}!A2:S'  # Skip header row
+                range=f'{self.sheet_name}!A2:{self._last_col}'  # Skip header row
             ).execute()
 
             return result.get('values', [])
@@ -354,7 +354,7 @@ class GoogleSheetsManager:
 
             self.sheets.values().append(
                 spreadsheetId=self.spreadsheet_id,
-                range=f'{self.sheet_name}!A:S',
+                range=f'{self.sheet_name}!A:{self._last_col}',
                 valueInputOption='RAW',
                 insertDataOption='INSERT_ROWS',
                 body={'values': [new_row]}
@@ -393,7 +393,7 @@ class GoogleSheetsManager:
 
             self.sheets.values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f'{self.sheet_name}!A{row_num}:S{row_num}',
+                range=f'{self.sheet_name}!A{row_num}:{self._last_col}{row_num}',
                 valueInputOption='RAW',
                 body={'values': [updated_row]}
             ).execute()
