@@ -58,29 +58,30 @@ class GoogleSheetsManager:
         self.spreadsheet_id = spreadsheet_id
         self.sheet_name = "Leads"  # Name of the sheet tab
 
-        # Column headers (A-S = 19 columns)
+        # Column headers (A-T = 20 columns)
         self.columns = [
-            "timestamp",              # A
-            "source",                 # B
-            "name",                   # C
-            "phone",                  # D
-            "status",                 # E
-            "match_score",            # F
-            "destination",            # G
-            "experience",             # H
-            "goals",                  # I
-            "conversation_summary",   # J
-            "reminder_date",          # K
-            "notes",                  # L
-            "whatsapp_id",            # M
-            "last_message_time",      # N
-            "message_count",          # O
-            "rejects",               # P - objections (admitted + suspected)
-            "meeting",               # Q - scheduled meeting details
-            "age",                   # R
-            "location",              # S - where in Israel
+            "timestamp",              # A - זמן יצירת ליד
+            "phone",                  # B - מספר טלפון (ייחודי)
+            "name",                   # C - שם
+            "status",                 # D - סטטוס (חדש/בשיחה/נקבעה שיחה/נסגר/לא מתאים)
+            "match_score",            # E - ציון התאמה (0-100)
+            "age",                    # F - גיל
+            "experience",             # G - ניסיון לחימה (מתחיל/בינוני/מתקדם)
+            "location",               # H - מקום מגורים בארץ
+            "travel_readiness",       # I - מוכנות ליציאה לחו"ל
+            "goals",                  # J - מטרות (כושר/אגרוף/ריפוי/אקסטרים)
+            "destination",            # K - יעד (פוקט/צ'אנג מאי/אחר)
+            "conversation_summary",   # L - סיכום שיחה
+            "rejects",                # M - התנגדויות
+            "meeting",                # N - פגישה שנקבעה
+            "last_message_time",      # O - זמן הודעה אחרונה
+            "message_count",          # P - מספר הודעות
+            "source",                 # Q - מקור (WhatsApp/אחר)
+            "whatsapp_id",            # R - WhatsApp ID
+            "reminder_date",          # S - תאריך תזכורת
+            "notes",                  # T - הערות
         ]
-        self._last_col = "S"
+        self._last_col = "T"
 
         # Set up Google Sheets API
         try:
@@ -149,26 +150,125 @@ class GoogleSheetsManager:
         return creds
 
     def _initialize_sheet(self):
-        """Initialize sheet with headers if empty"""
+        """Initialize sheet with headers, formatting, and sorting"""
         try:
             # Try to read first row
             result = self.sheets.values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range=f'{self.sheet_name}!A1:S1'
+                range=f'{self.sheet_name}!A1:{self._last_col}1'
             ).execute()
 
             values = result.get('values', [])
 
-            # If empty, write headers
+            # If empty, write headers and format
             if not values:
+                # Hebrew translations for column headers
+                hebrew_headers = [
+                    "תאריך יצירה",      # timestamp
+                    "טלפון",            # phone
+                    "שם",               # name
+                    "סטטוס",            # status
+                    "ציון התאמה",       # match_score
+                    "גיל",              # age
+                    "ניסיון לחימה",     # experience
+                    "מיקום",            # location
+                    "מוכנות לנסיעה",    # travel_readiness
+                    "מטרות",            # goals
+                    "יעד",              # destination
+                    "סיכום שיחה",       # conversation_summary
+                    "התנגדויות",        # rejects
+                    "פגישה",            # meeting
+                    "הודעה אחרונה",     # last_message_time
+                    "מס' הודעות",       # message_count
+                    "מקור",             # source
+                    "WhatsApp ID",      # whatsapp_id
+                    "תזכורת",           # reminder_date
+                    "הערות",            # notes
+                ]
+
+                # Write headers
                 self.sheets.values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f'{self.sheet_name}!A1:S1',
+                    range=f'{self.sheet_name}!A1:{self._last_col}1',
                     valueInputOption='RAW',
-                    body={'values': [self.columns]}
+                    body={'values': [hebrew_headers]}
                 ).execute()
 
-                logger.info("Initialized Google Sheet with headers")
+                # Get sheet ID for formatting
+                sheet_metadata = self.service.spreadsheets().get(
+                    spreadsheetId=self.spreadsheet_id
+                ).execute()
+
+                sheet_id = None
+                for sheet in sheet_metadata.get('sheets', []):
+                    if sheet['properties']['title'] == self.sheet_name:
+                        sheet_id = sheet['properties']['sheetId']
+                        break
+
+                if sheet_id is not None:
+                    # Apply formatting and features
+                    requests = [
+                        # Freeze first row
+                        {
+                            'updateSheetProperties': {
+                                'properties': {
+                                    'sheetId': sheet_id,
+                                    'gridProperties': {
+                                        'frozenRowCount': 1
+                                    }
+                                },
+                                'fields': 'gridProperties.frozenRowCount'
+                            }
+                        },
+                        # Format header row (bold, background color, centered)
+                        {
+                            'repeatCell': {
+                                'range': {
+                                    'sheetId': sheet_id,
+                                    'startRowIndex': 0,
+                                    'endRowIndex': 1
+                                },
+                                'cell': {
+                                    'userEnteredFormat': {
+                                        'backgroundColor': {'red': 0.2, 'green': 0.5, 'blue': 0.8},
+                                        'textFormat': {'bold': True, 'foregroundColor': {'red': 1, 'green': 1, 'blue': 1}},
+                                        'horizontalAlignment': 'CENTER'
+                                    }
+                                },
+                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
+                            }
+                        },
+                        # Add filter to header row
+                        {
+                            'setBasicFilter': {
+                                'filter': {
+                                    'range': {
+                                        'sheetId': sheet_id,
+                                        'startRowIndex': 0,
+                                        'startColumnIndex': 0
+                                    }
+                                }
+                            }
+                        },
+                        # Auto-resize columns
+                        {
+                            'autoResizeDimensions': {
+                                'dimensions': {
+                                    'sheetId': sheet_id,
+                                    'dimension': 'COLUMNS',
+                                    'startIndex': 0,
+                                    'endIndex': 20
+                                }
+                            }
+                        }
+                    ]
+
+                    self.service.spreadsheets().batchUpdate(
+                        spreadsheetId=self.spreadsheet_id,
+                        body={'requests': requests}
+                    ).execute()
+
+                logger.info("Initialized Google Sheet with headers and formatting")
 
         except HttpError as e:
             if e.resp.status == 404:
