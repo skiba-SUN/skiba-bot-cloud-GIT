@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Google Sheets
     google_sheet_id: Optional[str] = Field(default=None, env="GOOGLE_SHEET_ID")
 
+    # Owner/Admin Settings
+    eden_phone: Optional[str] = Field(default=None, env="EDEN_PHONE")
+
     # Project paths
     project_root: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent)
     data_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "data")
