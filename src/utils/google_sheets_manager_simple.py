@@ -83,6 +83,30 @@ class GoogleSheetsManager:
         ]
         self._last_col = "T"
 
+        # Hebrew column headers (must match self.columns order exactly)
+        self.hebrew_headers = [
+            "תאריך יצירה",      # timestamp
+            "טלפון",            # phone
+            "שם",               # name
+            "סטטוס",            # status
+            "ציון התאמה",       # match_score
+            "גיל",              # age
+            "ניסיון לחימה",     # experience
+            "מיקום",            # location
+            "מוכנות לנסיעה",    # travel_readiness
+            "מטרות",            # goals
+            "יעד",              # destination
+            "סיכום שיחה",       # conversation_summary
+            "התנגדויות",        # rejects
+            "פגישה",            # meeting
+            "הודעה אחרונה",     # last_message_time
+            "מס' הודעות",       # message_count
+            "מקור",             # source
+            "WhatsApp ID",      # whatsapp_id
+            "תזכורת",           # reminder_date
+            "הערות",            # notes
+        ]
+
         # Set up Google Sheets API
         try:
             credentials = self._get_credentials()
@@ -159,40 +183,25 @@ class GoogleSheetsManager:
             ).execute()
 
             values = result.get('values', [])
+            existing_headers = values[0] if values else []
 
-            # If empty, write headers and format
-            if not values:
-                # Hebrew translations for column headers
-                hebrew_headers = [
-                    "תאריך יצירה",      # timestamp
-                    "טלפון",            # phone
-                    "שם",               # name
-                    "סטטוס",            # status
-                    "ציון התאמה",       # match_score
-                    "גיל",              # age
-                    "ניסיון לחימה",     # experience
-                    "מיקום",            # location
-                    "מוכנות לנסיעה",    # travel_readiness
-                    "מטרות",            # goals
-                    "יעד",              # destination
-                    "סיכום שיחה",       # conversation_summary
-                    "התנגדויות",        # rejects
-                    "פגישה",            # meeting
-                    "הודעה אחרונה",     # last_message_time
-                    "מס' הודעות",       # message_count
-                    "מקור",             # source
-                    "WhatsApp ID",      # whatsapp_id
-                    "תזכורת",           # reminder_date
-                    "הערות",            # notes
-                ]
+            # Always sync headers to match current column definition
+            needs_header_update = (existing_headers != self.hebrew_headers)
 
-                # Write headers
+            if not values or needs_header_update:
+                if needs_header_update and existing_headers:
+                    logger.warning(f"[SHEETS] Headers mismatch! Updating headers to match current column definition.")
+                    logger.warning(f"[SHEETS] Old: {existing_headers}")
+                    logger.warning(f"[SHEETS] New: {self.hebrew_headers}")
+
+                # Write headers using self.hebrew_headers
                 self.sheets.values().update(
                     spreadsheetId=self.spreadsheet_id,
                     range=f'{self.sheet_name}!A1:{self._last_col}1',
                     valueInputOption='RAW',
-                    body={'values': [hebrew_headers]}
+                    body={'values': [self.hebrew_headers]}
                 ).execute()
+                logger.info(f"[SHEETS] Headers written: {self.hebrew_headers}")
 
                 # Get sheet ID for formatting
                 sheet_metadata = self.service.spreadsheets().get(
@@ -319,7 +328,9 @@ class GoogleSheetsManager:
                 range=f'{self.sheet_name}!A2:{self._last_col}'  # Skip header row
             ).execute()
 
-            return result.get('values', [])
+            rows = result.get('values', [])
+            logger.debug(f"[SHEETS] Read {len(rows)} rows from sheet")
+            return rows
 
         except HttpError as e:
             logger.error(f"Error reading sheet: {str(e)}")
@@ -385,6 +396,10 @@ class GoogleSheetsManager:
 
             current_data = self._row_to_dict(rows[row_num - 2])
 
+            skipped_keys = [k for k in updates.keys() if k not in self.columns]
+            if skipped_keys:
+                logger.warning(f"[SHEETS] Keys not in columns (will be skipped): {skipped_keys}")
+
             for key, value in updates.items():
                 if key in self.columns:
                     current_data[key] = value
@@ -398,7 +413,8 @@ class GoogleSheetsManager:
                 body={'values': [updated_row]}
             ).execute()
 
-            logger.info(f"Updated lead: {phone}")
+            saved_fields = {k: v for k, v in updates.items() if k in self.columns}
+            logger.info(f"[SHEETS] Updated row {row_num} for {phone}: {list(saved_fields.keys())}")
             return True
 
         except Exception as e:
